@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   web:
@@ -7,13 +6,14 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./src:/var/www/html:z
+      - ./src:/var/www/html
     depends_on:
       - db
     networks:
       - lamp_network
     env_file:
       - .env
+    restart: unless-stopped
 
   db:
     image: mariadb:11
@@ -26,9 +26,11 @@ services:
     networks:
       - lamp_network
 
+
 networks:
   lamp_network:
     driver: bridge
 
 volumes:
   db_data:
+
