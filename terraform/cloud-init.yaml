@@ -1,0 +1,10 @@
+#cloud-config
+package_update: true
+packages:
+  - python3
+  - python3-apt
+  - ca-certificates
+ssh_pwauth: false
+disable_root: true
+runcmd:
+  - [sh, -c, "printf 'cloud-init-ready\n' > /var/tmp/cloud-init-ready"]
