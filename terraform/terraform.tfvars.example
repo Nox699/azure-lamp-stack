@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and edit it.
+project_name        = "lamp-school"
+location            = "Sweden Central"
+vm_size             = "Standard_B2als_v2"
+admin_username      = "azureadmin"
+ssh_public_key_path = "~/.ssh/azure-lamp.pub"
+
+# Replace with YOUR current public IPv4 address followed by /32.
+# Example only; 203.0.113.10 is documentation space.
+admin_cidr = "203.0.113.10/32"

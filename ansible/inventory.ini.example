@@ -1,0 +1,3 @@
+[web]
+# Replace with the Terraform public_ip output.
+203.0.113.20 ansible_user=azureadmin ansible_ssh_private_key_file=~/.ssh/azure-lamp

@@ -7,4 +7,4 @@ packages:
 ssh_pwauth: false
 disable_root: true
 runcmd:
-  - [sh, -c, "printf 'cloud-init-ready\n' > /var/tmp/cloud-init-ready"]
+  - [sh, -c, "printf 'cloud-init-ready\\n' > /var/tmp/cloud-init-ready"]

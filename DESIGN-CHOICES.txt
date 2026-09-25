@@ -1,0 +1,131 @@
+AZURE LAMP - DESIGN CHOICES
+===========================
+
+Purpose
+-------
+This project is intentionally designed as a small, understandable school deployment rather than an enterprise platform. The goal is to satisfy the assignment with a secure, reproducible design that can be explained after a short Azure course.
+
+Architecture
+------------
+One Azure Ubuntu VM runs Docker Compose with two containers:
+
+  Internet
+     |
+     | TCP/80
+     v
+  Public IP -> NSG -> NIC -> Ubuntu VM
+                            |
+                            +-- Apache + PHP container
+                            |       |
+                            |       +-- private Docker network
+                            |               |
+                            +----------> MariaDB container
+                                            |
+                                            +-- db_data volume
+
+Terraform creates Azure infrastructure.
+Cloud-init performs only a minimal first-boot bootstrap.
+Ansible configures Ubuntu, installs Docker, deploys application files, writes the protected .env file, and starts Docker Compose.
+Playwright tests the deployed web application from outside Azure.
+
+Why Apache instead of Nginx?
+----------------------------
+The assignment accepts LAMP or LEMP. Apache + PHP is simpler here because the official php:8.3-apache image contains both the web server and PHP runtime in one container. This keeps the application at two containers and leaves more focus for Azure, Terraform, Ansible, networking and security.
+
+Containers
+----------
+1. web: Apache + PHP 8.3
+2. db: MariaDB 11.4
+
+Only the web container publishes a host port. MariaDB has NO host port mapping, so TCP/3306 remains inside the Docker network.
+
+Azure settings actually used
+----------------------------
+Region: Sweden Central
+VM: Standard_B2als_v2 (2 vCPU / 4 GiB RAM)
+OS: Ubuntu 24.04 LTS
+VNet: 10.20.0.0/16
+Subnet: 10.20.1.0/24
+Public IP: Standard, static IPv4
+OS disk: 30 GiB Standard SSD
+Admin user: azureadmin
+SSH authentication: dedicated ED25519 key
+
+The original design used Standard_B1ms. During deployment Azure returned SkuNotAvailable for B1ms in Sweden Central for this subscription. The available Standard_B2als_v2 size was therefore selected. This is also more comfortable for Ubuntu + Docker + Apache/PHP + MariaDB while remaining inside the assignment budget.
+
+Network security
+----------------
+Inbound TCP/80: allowed from the internet so the assignment can be tested.
+Inbound TCP/22: allowed only from admin_cidr, normally one current public IP using /32.
+Inbound TCP/3306: not allowed by the NSG and not published by Docker.
+Other unsolicited inbound traffic: denied by the NSG default rules.
+
+The database is therefore protected twice from direct internet access:
+1. Azure NSG has no inbound 3306 allow rule.
+2. Docker Compose does not publish MariaDB's 3306 port to the VM host.
+
+SSH
+---
+Password authentication is disabled. Terraform places only the administrator's SSH public key on the VM. The private key remains on the administrator's local computer and is used by SSH/Ansible.
+
+Secrets
+-------
+Application database credentials are NOT stored in source control.
+Ansible reads ansible/secrets.yml, which is ignored by .gitignore, and creates /opt/azure-lamp-stack/.env with mode 0600.
+For a real production system, Azure Key Vault would be a stronger next step, but it is deliberately not added here because the assignment is focused on Terraform, Ansible, Docker and basic Azure networking.
+
+Database persistence
+--------------------
+MariaDB stores /var/lib/mysql in the Docker named volume db_data. Recreating the database container does not remove the database volume unless it is explicitly deleted.
+
+Terraform vs Ansible vs Docker
+------------------------------
+Terraform: creates the Azure infrastructure (RG, VNet, subnet, NSG, Public IP, NIC, VM).
+Cloud-init: minimal first-boot preparation only.
+Ansible: configures the Linux VM and deploys software.
+Docker Compose: defines/runs the LAMP application services.
+Playwright: tests the finished public application.
+
+This separation makes each tool responsible for one layer and makes the solution easier to explain and reproduce.
+
+Cost / $200 for 100 days
+------------------------
+Budget target: $2.00/day ($200 / 100 days).
+
+Final deployed VM: Standard_B2als_v2 in Sweden Central.
+Approximate Linux retail compute price: $0.0389/hour = about $28.40/month at 730 hours.
+After adding the Standard static IPv4 and small Standard SSD OS disk, a practical assignment estimate is approximately $35/month before meaningful data-egress costs.
+
+Approximate budget:
+- $35/month
+- about $1.15/day
+- about $115 for 100 days
+- about 170-175 days for $200
+
+The solution therefore still meets the 100-day/$200 challenge with margin. The final report should use the Azure Pricing Calculator because prices can differ by subscription and date.
+
+Why not add more Azure services?
+--------------------------------
+No load balancer: one VM is sufficient for a small school test workload.
+No Kubernetes: unnecessary complexity for two containers.
+No Azure Database for MariaDB: would increase cost and hide the container/database learning objective.
+No Key Vault by default: useful for real production but additional complexity for this scope.
+No HTTPS by default: the assignment requires testing through a public IP. HTTPS is a clear production improvement when a domain name is available.
+
+On-premises / rented server vs Azure
+------------------------------------
+A rented VPS can be cheaper for a small workload with stable resource usage. Azure is used here because it supports the learning goals: infrastructure is created reproducibly with Terraform, network/security settings are explicit, resources can be changed programmatically, and the complete environment can be removed with terraform destroy.
+
+Testing completed
+-----------------
+The deployed solution was tested successfully on 22 September 2026:
+- Terraform validation/plan/apply completed after selecting an available VM SKU.
+- SSH key authentication to the VM succeeded.
+- Ansible completed with failed=0 and unreachable=0.
+- TCP/80 was reachable publicly.
+- TCP/3306 was not reachable publicly.
+- Playwright ran three Azure E2E tests and all 3 passed.
+
+Production caveat
+-----------------
+This is production-style for the school assignment, not an enterprise production architecture. A real public service would normally add HTTPS, automated backups, monitoring/alerting, centralized secrets, vulnerability/patch management, and possibly redundancy/high availability.
