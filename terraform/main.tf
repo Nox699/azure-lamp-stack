@@ -1,26 +1,37 @@
-resource "azurerm_resource_group" "rg" {
-  name     = "lamp-rg"
-  location = "Sweden Central"
+locals {
+  tags = {
+    project     = var.project_name
+    environment = "school"
+    managed_by  = "terraform"
+  }
+}
+
+resource "azurerm_resource_group" "main" {
+  name     = "${var.project_name}-rg"
+  location = var.location
+  tags     = local.tags
 }
 
 resource "azurerm_virtual_network" "main" {
-  name                = "lamp-vnet"
+  name                = "${var.project_name}-vnet"
   address_space       = ["10.20.0.0/16"]
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
 }
 
 resource "azurerm_subnet" "main" {
   name                 = "app-subnet"
-  resource_group_name  = azurerm_resource_group.rg.name
+  resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.20.1.0/24"]
 }
 
 resource "azurerm_network_security_group" "main" {
-  name                = "lamp-nsg"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = "${var.project_name}-nsg"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
 
   security_rule {
     name                       = "Allow-HTTP"
@@ -48,17 +59,19 @@ resource "azurerm_network_security_group" "main" {
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "lamp-pip"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = "${var.project_name}-pip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  tags                = local.tags
 }
 
 resource "azurerm_network_interface" "main" {
-  name                = "lamp-nic"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = "${var.project_name}-nic"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
 
   ip_configuration {
     name                          = "primary"
@@ -68,16 +81,24 @@ resource "azurerm_network_interface" "main" {
   }
 }
 
+resource "azurerm_network_interface_security_group_association" "main" {
+  network_interface_id      = azurerm_network_interface.main.id
+  network_security_group_id = azurerm_network_security_group.main.id
+}
+
 resource "azurerm_linux_virtual_machine" "main" {
-  name                            = "lamp-vm"
+  name                            = "${var.project_name}-vm"
   computer_name                   = "lampvm"
-  resource_group_name             = azurerm_resource_group.rg.name
-  location                        = azurerm_resource_group.rg.location
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = azurerm_resource_group.main.location
   size                            = var.vm_size
   admin_username                  = var.admin_username
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.main.id]
   custom_data                     = filebase64("${path.module}/cloud-init.yaml")
+  tags                            = local.tags
+
+  depends_on = [azurerm_network_interface_security_group_association.main]
 
   admin_ssh_key {
     username   = var.admin_username
@@ -85,7 +106,7 @@ resource "azurerm_linux_virtual_machine" "main" {
   }
 
   os_disk {
-    name                 = "lamp-osdisk"
+    name                 = "${var.project_name}-osdisk"
     caching              = "ReadWrite"
     storage_account_type = "StandardSSD_LRS"
     disk_size_gb         = 30
@@ -99,9 +120,4 @@ resource "azurerm_linux_virtual_machine" "main" {
   }
 
   boot_diagnostics {}
-}
-
-resource "azurerm_subnet_network_security_group_association" "main" {
-  subnet_id                 = azurerm_subnet.main.id
-  network_security_group_id = azurerm_network_security_group.main.id
 }
