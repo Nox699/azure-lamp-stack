@@ -1,31 +1,55 @@
-
 services:
   web:
-    build: ./apache-php
+    build:
+      context: ./apache-php
     container_name: lamp_web
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
-      - ./src:/var/www/html
-    depends_on:
-      - db
-    networks:
-      - lamp_network
+      - ./src:/var/www/html:ro
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - lamp_network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
-    image: mariadb:11
+    image: mariadb:11.4
     container_name: lamp_db
-    restart: unless-stopped
     env_file:
       - .env
     volumes:
       - db_data:/var/lib/mysql
     networks:
       - lamp_network
-
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   lamp_network:
@@ -33,4 +57,3 @@ networks:
 
 volumes:
   db_data:
-
