@@ -1,0 +1,106 @@
+---
+- name: Configure Azure LAMP VM
+  hosts: web
+  gather_facts: false
+  become: true
+  vars_files:
+    - secrets.yml
+  vars:
+    app_dir: /opt/azure-lamp-stack
+
+  pre_tasks:
+    - name: Wait for SSH to become available
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Wait for cloud-init to finish
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+
+    - name: Gather facts after first-boot provisioning
+      ansible.builtin.setup:
+
+  tasks:
+    - name: Install Docker and Docker Compose v2 from Ubuntu repositories
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure Docker starts automatically
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add admin user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Copy Docker Compose file
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../docker-compose.yml"
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+
+    - name: Copy Apache/PHP image definition
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../apache-php/"
+        dest: "{{ app_dir }}/apache-php/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Copy PHP application
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../src/"
+        dest: "{{ app_dir }}/src/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Write protected application environment file
+      ansible.builtin.template:
+        src: env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Build and start LAMP stack
+      ansible.builtin.command:
+        cmd: docker compose up -d --build --remove-orphans
+        chdir: "{{ app_dir }}"
+      register: compose_up
+      changed_when: >-
+        'Created' in compose_up.stdout or
+        'Started' in compose_up.stdout or
+        'Recreated' in compose_up.stdout or
+        'Built' in compose_up.stdout
+
+    - name: Wait for application health endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1/health.php
+        status_code: 200
+        return_content: true
+      register: healthcheck
+      retries: 12
+      delay: 5
+      until: healthcheck.status == 200
