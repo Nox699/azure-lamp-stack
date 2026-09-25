@@ -1,8 +1,51 @@
+# Application secrets / local runtime configuration
 .env
-.git
+.env.*
+!.env.example
+ansible/secrets.yml
+ansible/inventory.ini
 
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/.terraform.lock.hcl
-terraform/terraform.tfvars
+# SSH/private key material (never commit)
+.ssh/
+**/.ssh/
+*.pem
+*.key
+*.ppk
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+azure-lamp
+azure-lamp.pub
+homelab
+homelab.pub
+
+# Terraform local/state/sensitive files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!terraform/terraform.tfvars.example
+crash.log
+crash.*.log
+
+# Keep Terraform dependency lock file in Git
+!.terraform.lock.hcl
+
+# Ansible local artifacts
+*.retry
+
+# Playwright / Node
+node_modules/
+playwright-report/
+test-results/
+
+# Python virtual environments
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
